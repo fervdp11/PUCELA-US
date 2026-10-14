@@ -1,0 +1,14 @@
+{
+  "name": "sanagus-as",
+  "version": "3.2.4",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node server/node.js",
+    "play": "node server/node.js",
+    "test": "node --test tests/game.test.js tests/motion-vision.test.js tests/mobile-controls.test.js"
+  }
+}
