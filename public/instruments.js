@@ -1,0 +1,28 @@
+// Controles compartidos de ratón, teclado y puntero táctil. Sin HTML Drag & Drop.
+const colors=['#ef8b9e','#e4c672','#80bce2','#ae97da'];
+export function connectWires(root,order,changed,tone=()=>{}){
+ const links=Array(4).fill(-1),listeners=[];let selected=null,drag=null;
+ const on=(el,type,fn)=>{el.addEventListener(type,fn);listeners.push(()=>el.removeEventListener(type,fn));};
+ root.innerHTML=`<div class="patch-board"><svg viewBox="0 0 600 280" preserveAspectRatio="none" aria-hidden="true"></svg>${[0,1,2,3].map(i=>`<button class="patch-port left" data-from="${i}" style="--port:${colors[i]};top:${i*25}%"><span>${['A','B','C','D'][i]}</span><i>●</i></button>`).join('')}${order.map((v,i)=>`<button class="patch-port right" data-to="${i}" style="--port:${colors[v]};top:${i*25}%"><i>●</i><span>${['A','B','C','D'][v]}</span></button>`).join('')}</div>`;
+ const board=root.querySelector('.patch-board'),svg=root.querySelector('svg');
+ function paint(){svg.innerHTML=links.map((to,i)=>to<0?'':`<path d="M155 ${35+i*70} C270 ${35+i*70} 330 ${35+to*70} 445 ${35+to*70}" fill="none" stroke="#0d192b" stroke-width="13"/><path d="M155 ${35+i*70} C270 ${35+i*70} 330 ${35+to*70} 445 ${35+to*70}" fill="none" stroke="${colors[i]}" stroke-width="7" stroke-linecap="round"/>`).join('')+(drag&&selected!==null?`<path d="M155 ${35+selected*70} Q300 ${35+selected*70} ${drag.x} ${drag.y}" fill="none" stroke="${colors[selected]}" stroke-width="6" stroke-linecap="round" opacity=".75"/>`:'');root.querySelectorAll('[data-from]').forEach(b=>{const i=Number(b.dataset.from);b.classList.toggle('selected',selected===i);b.classList.toggle('connected',links[i]>=0);});root.querySelectorAll('[data-to]').forEach(b=>b.classList.toggle('connected',links.includes(Number(b.dataset.to))));changed([...links]);}
+ function point(e){const r=board.getBoundingClientRect();return {x:(e.clientX-r.left)/Math.max(1,r.width)*600,y:(e.clientY-r.top)/Math.max(1,r.height)*280};}
+ function connect(to){if(selected===null)return;if(order[to]===selected){links[selected]=to;tone(590+selected*90,.08);selected=null;}else tone(180,.07);drag=null;paint();}
+ on(root,'click',e=>{const from=e.target.closest('[data-from]'),to=e.target.closest('[data-to]');if(from){selected=Number(from.dataset.from);paint();}else if(to)connect(Number(to.dataset.to));});
+ on(board,'pointerdown',e=>{const b=e.target.closest('[data-from]');if(!b)return;e.preventDefault();selected=Number(b.dataset.from);b.setPointerCapture?.(e.pointerId);drag=point(e);paint();});
+ on(board,'pointermove',e=>{if(!drag)return;e.preventDefault();drag=point(e);paint();});
+ on(board,'pointerup',e=>{if(!drag)return;const p=point(e),to=Math.floor(p.y/70);if(p.x>400&&p.x<610&&to>=0&&to<4)connect(to);else{drag=null;paint();}});
+ on(board,'pointercancel',()=>{drag=null;paint();});paint();return {answer:()=>[...links],valid:()=>links.every(v=>v>=0),dispose:()=>listeners.forEach(fn=>fn())};
+}
+export function arrangeObjects(root,{ids,expected,label,icon},changed,tone=()=>{}){
+ const slots=expected.map(()=>null),listeners=[];let selected=null,drag=null,suppressClickUntil=0;
+ const on=(type,fn)=>{root.addEventListener(type,fn);listeners.push(()=>root.removeEventListener(type,fn));};
+ root.innerHTML=`<div class="cargo-slots">${expected.map((id,i)=>`<button class="cargo-slot" data-slot="${i}"><small>${label(id)}</small><span class="cargo-ghost">${icon(id)}</span></button>`).join('')}</div><div class="cargo-source">${ids.map(id=>`<button class="cargo-item" data-object="${id}" style="--bottle:${['#7ccab0','#c1d58b','#e1bc78','#cf859b','#a2c4d5','#a79bcf'][id%6]}"><span>${icon(id)}</span><small>${label(id)}</small></button>`).join('')}</div>`;
+ function paint(){root.querySelectorAll('[data-object]').forEach(b=>{const id=Number(b.dataset.object);b.hidden=slots.includes(id);b.classList.toggle('selected',id===selected);});root.querySelectorAll('[data-slot]').forEach(b=>{const i=Number(b.dataset.slot);b.querySelector('span').innerHTML=slots[i]===null?icon(expected[i]):icon(slots[i]);b.classList.toggle('filled',slots[i]!==null);b.classList.toggle('correct',slots[i]===expected[i]);});changed(slots.map(v=>v??-1));}
+ function place(i){if(selected===null){slots[i]=null;paint();return;}const old=slots.indexOf(selected);if(old>=0)slots[old]=null;slots[i]=selected;selected=null;tone(520+i*60,.06);paint();}
+ on('click',e=>{if(performance.now()<suppressClickUntil)return;const a=e.target.closest('[data-object]'),b=e.target.closest('[data-slot]');if(a){selected=Number(a.dataset.object);paint();}else if(b)place(Number(b.dataset.slot));});
+ on('pointerdown',e=>{const b=e.target.closest('[data-object]');if(!b)return;selected=Number(b.dataset.object);drag={button:b,x:e.clientX,y:e.clientY,id:e.pointerId};b.setPointerCapture?.(e.pointerId);b.classList.add('dragging');paint();});
+ on('pointermove',e=>{if(!drag||e.pointerId!==drag.id)return;e.preventDefault();drag.moved=Math.hypot(e.clientX-drag.x,e.clientY-drag.y)>5;drag.button.style.transform=`translate(${e.clientX-drag.x}px,${e.clientY-drag.y}px)`;});
+ function release(e,cancel=false){if(!drag)return;const b=drag.button;if(drag.moved)suppressClickUntil=performance.now()+350;b.style.transform='';b.classList.remove('dragging');drag=null;if(!cancel){const target=[...root.querySelectorAll('[data-slot]')].find(q=>{const r=q.getBoundingClientRect();return e.clientX>=r.left&&e.clientX<=r.right&&e.clientY>=r.top&&e.clientY<=r.bottom;});if(target)place(Number(target.dataset.slot));}}
+ on('pointerup',e=>release(e));on('pointercancel',e=>release(e,true));paint();return {answer:()=>slots.map(v=>v??-1),valid:()=>slots.every((v,i)=>v===expected[i]),dispose:()=>listeners.forEach(fn=>fn())};
+}
