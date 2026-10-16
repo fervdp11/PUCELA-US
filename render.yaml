@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: sanagus-as
+    runtime: node
+    plan: free
+    buildCommand: node --check server/node.js
+    startCommand: node server/node.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
