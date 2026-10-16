@@ -1,0 +1,3 @@
+// Balanced rows, recalculated from available CSS pixels after rotation.
+export function lineupColumns(count,width,touch=false){if(!count)return 1;const cap=Math.max(1,Math.floor((width+8)/((touch?48:72)+8))),max=count===10?Math.min(5,cap):cap;return Math.ceil(count/Math.ceil(count/Math.max(1,max)));}
+export function layoutLineup(root,touch=false){const count=root.children.length,width=Math.min(880,root.parentElement?.clientWidth||globalThis.innerWidth||880)-16,columns=lineupColumns(count,width,touch);root.style.setProperty('--lineup-cols',columns);root.style.setProperty('--lineup-item',Math.min(touch?58:84,(width-(columns-1)*8)/columns)+'px');root.dataset.rows=Math.ceil(count/columns);}
