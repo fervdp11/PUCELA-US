@@ -21,6 +21,7 @@ export function passSecret(){
   return fresh;
 }
 export function makeServer(store=new MemoryStore()){
+  const WS_TICK = 33;
   store.secret??=passSecret();
   const server=http.createServer(async(req,res)=>{
     const pathname=new URL(req.url,'http://localhost').pathname;
@@ -43,6 +44,7 @@ export function makeServer(store=new MemoryStore()){
   // jugando, cada petición del cliente ya hace avanzar la sala; este reloj
   // existe para las salas que se quedan sin nadie mirando. A 100 ms recorría
   // todas las salas diez veces por segundo sin necesidad.
+  attachTableSockets(server,store);
   const upkeep=setInterval(()=>{if(store.rooms)store.cleanup(Date.now());},100);upkeep.unref?.();
   const simulation=setInterval(()=>{if(!store.rooms)return;const now=Date.now();for(const [code,room] of store.rooms)if(room.phase!=='ended'&&room.players.some(p=>p.bot&&!p.removed))store.transact(code,r=>{tick(r,now);return null;}).catch(()=>{});},250);simulation.unref?.();server.on('close',()=>{clearInterval(simulation);clearInterval(upkeep);});return server;
 }
@@ -53,7 +55,7 @@ if(process.argv[1]===fileURLToPath(import.meta.url)){const port=Number(process.e
 // cliente envía su entrada (maza del Air Hockey, casillas, toques…) y el
 // servidor empuja la vista de su mesa 30 veces por segundo mientras juega.
 // Si el WebSocket no está disponible, el cliente sigue con HTTP como antes.
-const WS_GUID='258EAFA5-E914-47DA-95CA-C5AB0DC85B11',WS_MAX=2048,WS_TICK=33;
+const WS_GUID='258EAFA5-E914-47DA-95CA-C5AB0DC85B11',WS_MAX=2048;
 function wsFrame(text,op=0x81){const data=Buffer.from(text),n=data.length;let head;if(n<126)head=Buffer.from([op,n]);else{head=Buffer.alloc(4);head[0]=op;head[1]=126;head.writeUInt16BE(n,2);}return Buffer.concat([head,data]);}
 function wsReader(onText,onClose,raw){let buf=Buffer.alloc(0);return chunk=>{buf=Buffer.concat([buf,chunk]);if(buf.length>WS_MAX*4){onClose();return;}
   while(buf.length>=2){const op=buf[0]&15,masked=buf[1]&128;let n=buf[1]&127,off=2;if(n===126){if(buf.length<4)return;n=buf.readUInt16BE(2);off=4;}else if(n===127||n>WS_MAX||!masked){onClose();return;}
@@ -88,4 +90,3 @@ export function attachTableSockets(server,store){
     finally{busy=false;}},WS_TICK);loop.unref?.();
   server.on('close',()=>clearInterval(loop));
 }
-attachTableSockets(server,store);
