@@ -1,0 +1,14 @@
+{
+  "name": "pucela-us",
+  "version": "14.3.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node --max-old-space-size=320 server/node.js",
+    "test": "node --test --test-concurrency=1 tests/missions.test.mjs tests/game.test.js tests/motion-vision.test.js tests/mobile-controls.test.js tests/club.test.js tests/upgrade.test.js tests/experience.test.js tests/visibility.test.js tests/release.test.js tests/bots.test.js tests/version6.test.js tests/version7.test.js tests/version8.test.js tests/park81.test.js tests/items.test.js tests/version13.test.js tests/version14_1.test.js tests/version14_2.test.js",
+    "test:benchmark": "node tests/bot-benchmark.mjs"
+  }
+}
