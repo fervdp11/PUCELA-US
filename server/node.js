@@ -43,7 +43,6 @@ export function makeServer(store=new MemoryStore()){
   // jugando, cada petición del cliente ya hace avanzar la sala; este reloj
   // existe para las salas que se quedan sin nadie mirando. A 100 ms recorría
   // todas las salas diez veces por segundo sin necesidad.
-  attachTableSockets(server,store);
   const upkeep=setInterval(()=>{if(store.rooms)store.cleanup(Date.now());},100);upkeep.unref?.();
   const simulation=setInterval(()=>{if(!store.rooms)return;const now=Date.now();for(const [code,room] of store.rooms)if(room.phase!=='ended'&&room.players.some(p=>p.bot&&!p.removed))store.transact(code,r=>{tick(r,now);return null;}).catch(()=>{});},250);simulation.unref?.();server.on('close',()=>{clearInterval(simulation);clearInterval(upkeep);});return server;
 }
@@ -89,3 +88,4 @@ export function attachTableSockets(server,store){
     finally{busy=false;}},WS_TICK);loop.unref?.();
   server.on('close',()=>clearInterval(loop));
 }
+attachTableSockets(server,store);
