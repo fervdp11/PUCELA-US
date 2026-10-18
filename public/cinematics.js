@@ -1,0 +1,20 @@
+import {drawRobot} from './characters.js';
+import {drawKillScene,drawBody} from './eliminations.js';
+const ease=v=>{v=Math.max(0,Math.min(1,v));return v*v*(3-2*v);};
+export function mountCinematic(root,kind,s,{tone=()=>{},reduced=false,onDone=()=>{}}={}){
+ const teacher=kind==='teacher',killing=kind==='kill',reported=kind==='report',duration=teacher?1250:killing?1400:2400;
+ root.innerHTML=`<canvas class="cinematic-canvas" aria-hidden="true"></canvas><div class="cinematic-caption"><strong>${teacher?'¡A EXPULSADOS!':killing?'HAS PERDIDO LA SEÑAL':reported?'¡CADÁVER REPORTADO!':'¡REUNIÓN DE EMERGENCIA!'}</strong><small></small></div>`;
+ root.classList.toggle('kill-cinematic',killing);root.querySelector('small').textContent=teacher?`${s.teacherCapture.teacher} te ha atrapado. Vuelves a salir en 30 segundos.`:killing?'El equipo todavía cuenta contigo.':reported?`${s.meeting.caller} reportó a ${s.meeting.body}.`:`Convocó: ${s.meeting.caller}`;root.hidden=false;
+ const canvas=root.querySelector('canvas'),started=performance.now();let frame=0,impactSound=false,closed=false;
+ tone(killing?190:reported?620:460,.16,'triangle',.055);
+ function draw(now){if(closed)return;const elapsed=now-started,t=elapsed/1000,rect=root.getBoundingClientRect(),w=Math.max(1,rect.width||innerWidth),h=Math.max(1,rect.height||innerHeight),dpr=Math.min(1.5,window.devicePixelRatio||1);if(canvas.width!==Math.round(w*dpr)||canvas.height!==Math.round(h*dpr)){canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);}const c=canvas.getContext('2d');c.setTransform(dpr,0,0,dpr,0,0);c.fillStyle=killing?'#102234':'#341d35';c.fillRect(0,0,w,h);
+  const scale=Math.min(w/680,h/400),cx=w/2,cy=h*.46;c.save();c.translate(cx,cy);c.scale(scale,scale);
+  // Banda oblicua con entrada, anticipación y salida. Sin destellos rápidos.
+  c.save();c.rotate(-.09);c.translate(reduced?0:(1-ease(elapsed/360))*-780,0);c.fillStyle=killing?'#7a3458':'#ce4e68';c.fillRect(-650,-100,1300,200);c.fillStyle='#ffb08e';c.fillRect(-650,-101,1300,5);c.fillRect(-650,96,1300,5);c.fillStyle='#f1c29035';for(let i=-8;i<9;i++){c.beginPath();c.moveTo(i*100+t*18,-90);c.lineTo(i*100+60+t*18,-90);c.lineTo(i*100+15+t*18,90);c.lineTo(i*100-45+t*18,90);c.fill();}c.restore();
+  if(teacher){const k=ease(elapsed/550),vx=100-115*k;drawRobot(c,{...s.teacherCapture.victim,alive:true},vx,46,.95,now,false);drawRobot(c,{color:6,skin:4,alive:true},-90,46,1.1,now,false);c.strokeStyle='#e4bb97';c.lineWidth=13;c.lineCap='round';c.beginPath();c.moveTo(-72,8);c.lineTo(vx-9,9);c.stroke();c.fillStyle='#e4bb97';c.beginPath();c.roundRect(vx-15,1,16,16,5);c.fill();}
+  else if(killing){const fx=s.actionFx,age=Math.min(1090,elapsed*.85);drawKillScene(c,{...fx,x:-105,y:46,victimX:100,victimY:46},now,age);if(age>450)drawBody(c,{...fx.victim,x:100,y:46,at:0},age);}
+  else if(reported){c.save();c.translate(0,-20);c.rotate(Math.sin(t*2)*.08);c.scale(2.4,2.4);drawBody(c,{...(s.meeting.bodyAppearance||{color:3}),x:0,y:0},1000);c.restore();}
+  else{const press=ease((elapsed-340)/280)*(1-ease((elapsed-1050)/350));c.fillStyle='#223c50';c.beginPath();c.ellipse(0,52,105,33,0,0,Math.PI*2);c.fill();c.fillStyle='#aabbb5';c.beginPath();c.ellipse(0,27,83,27,0,0,Math.PI*2);c.fill();c.fillStyle='#802c51';c.fillRect(-57,0+press*15,114,25);c.fillStyle='#fa6e85';c.beginPath();c.ellipse(0,press*15,58,21,0,0,Math.PI*2);c.fill();c.strokeStyle='#ffe2b4';c.lineWidth=3;c.stroke();c.save();c.translate(-9,-100+press*115);c.rotate(.14);c.fillStyle='#f2ca9b';c.strokeStyle='#243b4c';c.lineWidth=4;c.beginPath();c.roundRect(-27,-88,47,93,16);c.fill();c.stroke();c.beginPath();c.roundRect(-46,-22,80,36,15);c.fill();c.stroke();for(let k=0;k<3;k++){c.beginPath();c.moveTo(-30+k*19,-16);c.lineTo(-30+k*19,-3);c.stroke();}c.restore();}
+  c.restore();if(elapsed>380&&!impactSound){impactSound=true;tone(killing?110:reported?780:690,.27,killing?'triangle':'sine',.05);}root.style.setProperty('--cinema-enter',String(ease(elapsed/320)));if(elapsed<duration)frame=requestAnimationFrame(draw);else{root.hidden=true;onDone();}}
+ frame=requestAnimationFrame(draw);return ()=>{closed=true;cancelAnimationFrame(frame);root.hidden=true;};
+}
