@@ -1,0 +1,19 @@
+{
+  "name": "pucela-us",
+  "version": "14.3.1",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node --max-old-space-size=320 server/node.js",
+    "test": "node --test --test-concurrency=1 tests/missions.test.mjs tests/game.test.js tests/motion-vision.test.js tests/mobile-controls.test.js tests/club.test.js tests/experience.test.js tests/visibility.test.js tests/bots.test.js tests/items.test.js tests/legacy.test.js tests/realtime.test.js",
+    "test:benchmark": "node tests/bot-benchmark.mjs",
+    "test:network-benchmark": "node tests/realtime-benchmark.mjs",
+    "test:browser": "node tests/browser-qa.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1"
+  }
+}
