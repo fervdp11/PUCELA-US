@@ -115,4 +115,4 @@ export function attachTableSockets(server,store){
 }
 
 // Arranque directo (al final del archivo, cuando todo el módulo ya está inicializado).
-if(process.argv[1]===fileURLToPath(import.meta.url)){const port=Number(process.env.PORT)||8080;const server=makeServer();server.listen(port,'0.0.0.0',()=>console.log(`PUCELA US · http://localhost:${port}\nEn tu red: http://IP-DE-TU-PC:${port}\nServidor activo. Ctrl+C para cerrar.`));}
+if(process.argv[1]===fileURLToPath(import.meta.url)){const port=Number(process.env.PORT)||3000;const server=makeServer();server.listen(port,'0.0.0.0',()=>console.log(`PUCELA US · http://localhost:${port}\nEn tu red: http://IP-DE-TU-PC:${port}\nServidor activo. Ctrl+C para cerrar.`));}
