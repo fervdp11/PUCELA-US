@@ -4,9 +4,10 @@
 const TAU=Math.PI*2;
 function oval(c,x,y,rx,ry,fill,stroke,w=2){c.beginPath();c.ellipse(x,y,Math.max(.1,rx),Math.max(.1,ry),0,0,TAU);if(fill){c.fillStyle=fill;c.fill();}if(stroke){c.strokeStyle=stroke;c.lineWidth=w;c.stroke();}}
 function star(c,x,y,r,fill,points=5){c.beginPath();for(let i=0;i<points*2;i++){const a=-Math.PI/2+i*Math.PI/points,d=i%2?r*.45:r;i?c.lineTo(x+Math.cos(a)*d,y+Math.sin(a)*d):c.moveTo(x+Math.cos(a)*d,y+Math.sin(a)*d);}c.closePath();c.fillStyle=fill;c.fill();}
-// Fase de la animación de reposo: se dispara cada siete segundos, dura 1,4 s.
-export function emotePhase(p,time,moving){if(!p.emote||moving)return -1;if(p.emoteK!=null)return p.emoteK;// 16.5 · baile lanzado desde la rueda (B)
- const t=(time+(p.color||0)*977)%7000;return t<1400?t/1400:-1;}
+// 16.10 · Los bailes ya no salen solos al quedarse quieto: solo desde la rueda de gestos (B),
+// igual que los emojis. Las vistas previas del armario/pase (`emotePreview`) sí lo repiten.
+export function emotePhase(p,time,moving){if(!p.emote||moving)return -1;if(p.emoteK!=null)return p.emoteK;
+ if(!p.emotePreview)return -1;return ((time+(p.color||0)*977)%1600)/1600;}
 // BETA 16.1 · Las animaciones mueven el cuerpo real: nada de brazos o manos
 // añadidos. `applyEmote` aplica el movimiento del cuerpo (con gravedad y
 // aplastamiento al despegar/aterrizar) y `emoteArms` devuelve el ángulo de cada

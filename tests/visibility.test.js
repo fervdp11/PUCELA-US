@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {WORLDS,canStand,move,TILE} from '../public/content.js';
-import {geometry,visibilityPolygon,safeVisibility,exactLineOfSight,opaqueAt,rayDistance,inPolygon} from '../public/visibility.js';
+import {geometry,visibilityPolygon,safeVisibility,exactLineOfSight,opaqueAt,rayDistance,castRay,inPolygon} from '../public/visibility.js';
 
 test('geometría exacta: habitaciones, pasillos, puertas y esquinas de ambos mapas',()=>{
  let origins=0,rays=0;
@@ -17,3 +17,16 @@ test('paredes rectas, esquinas sin fugas y estabilidad subpíxel',()=>{
 });
 
 test('un fotograma de visión inválido conserva una máscara válida y nunca deja el mundo entero al descubierto',()=>{const map={width:10,height:10,rooms:[{x:1,y:1,w:8,h:8}],corridors:[],props:[]},first=safeVisibility(map,{x:200,y:200},300);assert.equal(first.recovered,false);const invalid=safeVisibility(map,{x:NaN,y:NaN},300,first);assert.equal(invalid.recovered,true);assert.equal(invalid.points,first.points);const initial=safeVisibility(map,{x:55,y:200},300);assert.equal(initial.recovered,true);assert.ok(initial.points.length>3);assert.ok(initial.points.every(p=>Number.isFinite(p.x+p.y)));});
+
+test('índice espacial: cada rayo da exactamente la misma distancia que recorrer todos los segmentos',()=>{
+ let rays=0,seed=7;const rnd=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
+ for(const world of Object.values(WORLDS))for(const map of world.FLOORS){const {segments}=geometry(map);for(let n=0;n<3000;n++){const x=rnd()*map.width*TILE,y=rnd()*map.height*TILE,a=rnd()*Math.PI*2,max=[40,170,420,1400][n%4],dx=Math.cos(a),dy=Math.sin(a);
+  assert.equal(castRay(segments,x,y,dx,dy,max),rayDistance({x,y},dx,dy,segments,max),`${world.id} ${x},${y} ${a}`);rays++;}}
+ assert.ok(rays>=9000);
+});
+
+test('visión cacheada: mismas entradas devuelven el mismo polígono; al moverse se recalcula',()=>{
+ const map=WORLDS.club.FLOORS[0],o={x:map.spawn.x,y:map.spawn.y},first=safeVisibility(map,o,600),again=safeVisibility(map,{...o},600,first);assert.equal(again,first);
+ const moved=safeVisibility(map,{x:o.x+3,y:o.y},600,first);assert.notEqual(moved.points,first.points);assert.deepEqual(moved.points,visibilityPolygon(map,{x:o.x+3,y:o.y},600));
+ const wider=safeVisibility(map,o,700,first);assert.notEqual(wider.points,first.points);
+});

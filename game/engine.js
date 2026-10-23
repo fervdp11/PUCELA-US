@@ -230,9 +230,9 @@ function applyMotion(room,p,packet,now){const {LOBBY,MEETING,mapFor}=worldFor(ro
   // crédito (cubeta con fuga, máx. 450 ms), así que solo cuentan las ráfagas
   // reales. El límite acumulado de abajo sigue impidiendo moverse más deprisa
   // que el tiempo real.
-  const allowance=Math.max(0,now-(p.motionAt??p.moveAt))+150+Math.min(450,p.motionCredit||0);
+  const allowance=Math.max(0,now-(p.motionAt??p.moveAt))+300+Math.min(900,p.motionCredit||0);
   assert(elapsed<=3500&&elapsed<=allowance,'Movimiento demasiado rápido.');
-  assert((p.motionSpent||0)+elapsed<=now-(p.motionAnchor??p.moveAt)+150,'Movimiento demasiado rápido.');
+  assert((p.motionSpent||0)+elapsed<=now-(p.motionAnchor??p.moveAt)+400,'Movimiento demasiado rápido.');
   if(['lobby','game','meeting'].includes(room.phase)&&!(room.phase==='game'&&now<room.revealUntil)&&!(room.phase==='meeting')&&!p.puzzle&&!p.repair&&!p.camera&&!p.items?.watching&&!p.items?.chest&&!p.vent&&!p.hidden&&!(p.transition?.until>now)&&!(room.phase==='game'&&caged(p,now))){
     const map=room.phase==='meeting'?MEETING:room.phase==='lobby'?LOBBY:p.alive&&p.expelledUntil>now?detentionMap(mapFor(p.floor,blockOf(room))):motionMap(mapFor(p.floor,blockOf(room)),p,now),ghost=room.phase!=='lobby'&&!p.alive;
     for(const step of segments)move(map,room.phase==='meeting'?p.meetingPos:p,step.x,step.y,step.ms/1000,ghost,room.config.speed*itemSpeed(p,now));
@@ -247,7 +247,7 @@ function applyMotion(room,p,packet,now){const {LOBBY,MEETING,mapFor}=worldFor(ro
   const reported=p.motionClockFor===p.moveAt&&Number.isFinite(p.motionClock)?p.motionClock:(p.moveAt??now);
   const source=Number.isFinite(packet.time)?Math.max(now-3000,Math.min(now,packet.time)):elapsed>0?Math.min(now,Math.max(reported+elapsed,now-450)):now;
   p.motionClock=Math.max(p.motionClock||0,source);
-  p.motionCredit=Math.min(450,Math.max(0,allowance-elapsed));
+  p.motionCredit=Math.min(900,Math.max(0,allowance-elapsed));
   p.motionSeq=seq;p.motionAt=now;p.motionSpent=(p.motionSpent||0)+elapsed;p.moveAt=now;p.motionClockFor=now;
   if(room.phase==='game')recordTrail(p,p.motionClock);
 }
@@ -256,7 +256,7 @@ function applyMotion(room,p,packet,now){const {LOBBY,MEETING,mapFor}=worldFor(ro
 export function realtimeMotion(room,token,packet,now=Date.now()){
   const p=room.players.find(p=>p.token===token&&!p.removed);assert(p,'Tu sesión ha caducado.',401);
   if(!p.inputRateAt||now-p.inputRateAt>=1000){p.inputRateAt=now;p.inputRate=0;}
-  assert(++p.inputRate<=60,'Demasiados movimientos.',429);
+  assert(++p.inputRate<=120,'Demasiados movimientos.',429);
   applyMotion(room,p,packet,now);p.lastSeen=now;
   return p.motionSeq;
 }

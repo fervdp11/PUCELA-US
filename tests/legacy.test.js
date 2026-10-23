@@ -195,7 +195,7 @@ test('mesas: la revancha alterna quién empieza (tres en raya)',async()=>{const 
  assert.equal((await view(f,0)).phase,'over');await f.send(0,'tableAgain');await f.send(1,'tableAgain');t=await view(f,0);assert.equal(t.phase,'playing');assert.equal(t.view.turn,1);});
 test('mesas: secuencia a dos, quien falla pierde y el bot respeta el tiempo',async()=>{const f=await fixture(3),b=f.goto('table-simon');b(0);await f.send(0,'tableJoin',{game:'simon'});await f.send(0,'tableBot',{level:'hard'});
  f.advance(5000);let v=(await view(f,0)).view;assert.equal(v.phase,'input');const st=f.raw().tables.list[0].state;await f.send(0,'tableInput',{color:(st.seq[0]+1)%4});const end=await view(f,0);assert.equal(end.phase,'over');assert.equal(end.winner,1);});
-const {FB:FBX}=await import('../public/football.js');
+const {FB:FBX,BX}=await import('../public/football.js');
 test('mesas: fútbol de fichas abierto a todos, equipos alternos, chute desde la posición y gol',async()=>{const f=await fixture(4),at=f.goto('table-football');for(let i=0;i<3;i++)at(i);
  for(let i=0;i<3;i++)await f.send(i,'tableJoin',{game:'football'});const v=await view(f,0);assert.equal(v.phase,'playing');assert.equal(v.view.pl.length,3);assert.deepEqual(v.view.pl.map(q=>q.team),[0,1,0],'azul, rojo, azul');
  const s=f.raw().tables.list.find(x=>x.game==='football');assert.equal(f.raw().tables.list.filter(x=>x.game==='football').length,1,'una sola partida compartida');
@@ -227,6 +227,24 @@ test('mesas: boxeo por equipos — sparring si estás solo, golpe, defensa, ulti
  set();S().pl[b].x=S().pl[a].x+2;S().pl[b].y=S().pl[a].y;f.advance(100);await view(f,0);assert.ok(Math.hypot(S().pl[a].x-S().pl[b].x,S().pl[a].y-S().pl[b].y)>=29,'los púgiles no se atraviesan');
  set();S().pl[a].x=200;await f.send(0,'tableInput',{atk:1});assert.ok(S().pl[a].vx<0,'cada ataque te desplaza un poco hacia atrás');
  set();const st=S();st.pl[b].hp=5;st.pl[a].hp=60;await f.send(0,'tableInput',{atk:1});assert.equal(S().score[0],1,'el equipo del atacante suma un punto');assert.equal(S().pl[b].hp,100,'el KO reaparece');assert.equal(S().pl[a].hp,85,'todos ganan 25 %');
+});
+test('mesas: boxeo 16.10 — esquiva con invulnerabilidad, contraataque tras bloquear y objetos del ring',async()=>{const f=await fixture(4),at=f.goto('table-boxing');at(0);at(1);
+ await f.send(0,'tableJoin',{game:'boxing'});await f.send(1,'tableJoin',{game:'boxing'});
+ const S=()=>f.raw().tables.list.find(x=>x.game==='boxing').state,a=f.raw().players[0].id,b=f.raw().players[1].id;
+ const set=()=>{const st=S();st.pu=[];st.puNext=f.clock.now+60000;for(const [id,x,face] of [[a,200,1],[b,230,-1]])Object.assign(st.pl[id],{x,y:120,vx:0,vy:0,ix:0,iy:0,face,hp:100,ult:0,atkReady:0,stunUntil:0,inv:0,block:false,fly:0,dash:0,evade:0,dashReady:0,parryAt:0,goldUntil:0});st.last=f.clock.now;};
+ f.advance(2000);await view(f,0);
+ // Esquiva: el golpe que llega durante el impulso no hace daño; se mueve hacia atrás si no pulsas dirección.
+ set();await f.send(1,'tableInput',{dash:1});assert.ok(S().pl[b].dash>0&&S().pl[b].ddx===1,'impulso hacia atrás (se aleja del rival)');await f.send(0,'tableInput',{atk:1});assert.equal(S().pl[b].hp,100,'esquivado');assert.ok(S().pl[b].evadedAt>0);
+ await f.send(1,'tableInput',{dash:1});assert.equal(S().pl[b].dashReady>f.clock.now,true,'enfriamiento de la esquiva');
+ // Contraataque: tras bloquear un golpe, el siguiente golpe hace más daño que uno normal.
+ set();await f.send(1,'tableInput',{block:true});await f.send(0,'tableInput',{atk:1});assert.ok(S().pl[b].parryAt>0);await f.send(1,'tableInput',{block:false});f.advance(100);await view(f,0);
+ {const st=S();Object.assign(st.pl[a],{x:200,y:120,vx:0,vy:0,hp:100});Object.assign(st.pl[b],{x:230,y:120,vx:0,vy:0,face:-1,stunUntil:0,atkReady:0});st.last=f.clock.now;}
+ await f.send(1,'tableInput',{atk:1});assert.equal(S().pl[a].hp,100-BX.counterDmg,'contraataque');assert.ok(S().pl[b].counterAt>0);
+ // Objetos: aparecen con el tiempo, se recogen al tocarlos y tienen efecto real (corazón, rayo, oro).
+ set();{const st=S();st.puNext=f.clock.now;st.last=f.clock.now;}f.advance(40);await view(f,0);assert.equal(S().pu.length,1,'aparece un objeto');
+ for(const [kind,check] of [['heart',q=>q.hp===50+BX.heart],['bolt',q=>q.ult===BX.bolt],['gold',q=>q.goldUntil>f.clock.now]]){set();const st=S();st.pl[a].hp=50;st.pu=[{id:99,kind,x:200,y:120,at:f.clock.now}];f.advance(20);await view(f,0);assert.equal(S().pu.length,0,kind+' recogido');assert.ok(check(S().pl[a]),kind+' aplicado');assert.equal(S().puFx.kind,kind);}
+ set();S().pl[a].goldUntil=f.clock.now+5000;await f.send(0,'tableInput',{atk:1});assert.equal(S().pl[b].hp,100-Math.round(8*BX.goldK),'guantes de oro: golpe ×1,5');
+ const v=(await view(f,0)).view;assert.ok(Array.isArray(v.pu)&&v.pl.every(q=>'dash' in q&&'gold' in q),'la vista incluye objetos, esquiva y oro');
 });
 test('mesas: carrera con pulsaciones por lotes limitadas por el servidor',async()=>{const f=await fixture(3),at=f.goto('table-race');at(0);at(1);await f.send(0,'tableJoin',{game:'race'});await f.send(1,'tableJoin',{game:'race'});
  f.advance(500);await f.send(0,'tableInput',{n:6});assert.equal((await view(f,0)).view.pos[0],0);f.advance(3500);await f.send(0,'tableInput',{n:6});const p=(await view(f,0)).view.pos[0];assert.ok(p>=1&&p<=6);
@@ -377,7 +395,7 @@ test('HTTP: JSON y estáticos comprimidos, ETag con 304, keep-alive largo e IP r
   const png=await raw('/pucela-beta-192.png',{'accept-encoding':'gzip'});assert.equal(png.status,200);assert.equal(png.headers['content-encoding'],undefined);
   const created=await raw('/api/create',{'content-type':'application/json','accept-encoding':'gzip','x-forwarded-for':'1.2.3.4, 10.0.0.9'},'POST',JSON.stringify({profile:{name:'Host'}}));
   assert.equal(created.status,200);assert.equal(created.headers['content-encoding'],'gzip');const parsed=JSON.parse(gunzipSync(created.body));assert.ok(parsed.session.code);
-  const plain=await raw('/api/health');assert.equal(JSON.parse(plain.body).version,'16.9.0-beta');
+  const plain=await raw('/api/health');assert.equal(JSON.parse(plain.body).version,'16.10.0-beta');
  }finally{server.close();}
 });
 
