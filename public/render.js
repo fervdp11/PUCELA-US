@@ -44,15 +44,20 @@ function canvasBox(canvas){let box=canvasBoxes.get(canvas);if(box&&box.w>1&&box.
 // Resolución dinámica: si el dispositivo no llega a ~45 fps de forma sostenida
 // se dibuja a menos píxeles (densidad 1,5 → 1,0 → 0,8). Si vuelve a sobrar
 // tiempo, se recupera. Con histéresis para no redimensionar a cada momento.
-const quality={cap:1.5,last:0,winStart:0,frames:0,slow:0,fast:0};
+// 16.10 · Más escalones (1,5 · 1,25 · 1 · 0,85 · 0,7), reacción en 1,5 s y techo aprendido: si al
+// subir de nivel vuelve a ir lento, ese nivel queda vetado y no oscila. Se prioriza la fluidez.
+const QL=[.7,.85,1,1.25,1.5];
+const quality={cap:1.5,i:4,ceil:4,upAt:0,last:0,winStart:0,frames:0,fast:0};
 export function renderQuality(){return quality.cap;}
-function trackQuality(){const t=performance.now(),d=quality.last?t-quality.last:0;quality.last=t;
- // Pausas largas (pestaña oculta, carga, alerta) no cuentan como lentitud.
- if(d>250||!quality.winStart){quality.winStart=t;quality.frames=0;return;}
- quality.frames++;const span=t-quality.winStart;if(span<2000)return;const avg=span/quality.frames;quality.winStart=t;quality.frames=0;
- if(avg>24){quality.slow++;quality.fast=0;}else if(avg<17.4){quality.fast++;quality.slow=0;}else{quality.slow=0;quality.fast=0;}
- if(quality.slow>=2&&quality.cap>.8&&(quality.cap>1||avg>30)){quality.cap=quality.cap>1?1:.8;quality.slow=0;}
- else if(quality.fast>=5&&quality.cap<1.5){quality.cap=quality.cap<1?1:1.5;quality.fast=0;}}
+function trackQuality(){if(!quality.init&&typeof window!=='undefined'){quality.init=1;const r=window.devicePixelRatio||1;while(quality.i>2&&QL[quality.i]>r+.01)quality.i--;quality.ceil=quality.i;quality.cap=QL[quality.i];}
+ const t=performance.now(),d=quality.last?t-quality.last:0;quality.last=t;
+ // Pausas largas (pestaña oculta, carga, mesa abierta con el mapa a pocos fps) no cuentan como lentitud.
+ if(d>150||!quality.winStart){quality.winStart=t;quality.frames=0;return;}
+ quality.frames++;const span=t-quality.winStart;if(span<1500)return;const avg=span/quality.frames;quality.winStart=t;quality.frames=0;
+ if(avg>20.5){quality.fast=0;if(quality.i>0){if(t-quality.upAt<6000)quality.ceil=quality.i-1;quality.i--;}}
+ else if(avg<17.6){if(++quality.fast>=5&&quality.i<quality.ceil){quality.i++;quality.upAt=t;quality.fast=0;}}
+ else quality.fast=0;
+ quality.cap=QL[quality.i];}
 function clipVisionCircle(c,viewer,radius){c.beginPath();c.arc(viewer.x,viewer.y,radius,0,Math.PI*2);c.clip();}
 function mapRoomLabel(c,label,x,y,width,fontSize){
  c.save();c.font=`700 ${fontSize}px Segoe UI`;let lines=[label];
@@ -510,7 +515,7 @@ export function drawWorld(canvas,state,local,rendered,cam,dt,time){const {FLOORS
    drawActorInteraction(c,p,nowS,time,state.reducedEffects);const gd=gestureDance(p,nowS);drawRobot(c,gd?{...p,emote:gd.v,emoteK:gd.k}:p,p.x,p.y,size,time,!!(p.input?.x||p.input?.y||p.moving),p.id===state.me.id);c.restore();
   }});
   const imp=state.roster.find(q=>q.id===p.id)?.role==='impostor'||(p.isDecoy&&state.me.role==='impostor'&&(p.own||p.teammate)),tagAlpha=Math.max(0,Math.min(1,alpha*(p.id===state.me.id?1:p.alpha??1)))*(state.phase==='meeting'&&!p.alive?.46:1);
-  tags.push(()=>{c.save();if(p.id!==state.me.id)clipLimit();c.globalAlpha=tagAlpha;nameTag(c,p.name+(p.id===state.me.id?' · tú':'')+(state.phase==='meeting'&&state.roster.find(q=>q.id===p.id)?.muted?' 🔇':''),p.x,p.y-94,imp?'#ff697e':p.id===state.me.id?'#efffe9':'#f0f4e9',{bg:p.nameBg,color:p.nameColor,force:imp?'#ff697e':null});
+  tags.push(()=>{c.save();if(p.id!==state.me.id)clipLimit();c.globalAlpha=tagAlpha;nameTag(c,p.name+(state.phase==='meeting'&&state.roster.find(q=>q.id===p.id)?.muted?' 🔇':''),p.x,p.y-94,imp?'#ff697e':p.id===state.me.id?'#efffe9':'#f0f4e9',{bg:p.nameBg,color:p.nameColor,force:imp?'#ff697e':null});
    drawGestureEmoji(c,p,nowS);
    if(state.phase==='game'&&p.ghostMsg){c.font='700 12px Segoe UI';const label=p.ghostMsg,width=Math.min(240,Math.max(60,c.measureText(label).width+24));rr(c,p.x-width/2,p.y-132,width,34,12,'#2a1763ee','#c9b3ff');text(c,'👻 '+label,p.x,p.y-110,12,'#f3ecff');}
    if(state.phase==='meeting'){const msg=[...state.chat].reverse().find(m=>m.playerId===p.id&&nowS-m.time<6500);if(msg){c.font='700 12px Segoe UI';const label=msg.text,width=Math.min(225,Math.max(55,c.measureText(label).width+22));rr(c,p.x-width/2,p.y-125,width,34,9,'#fff5df','#385863');text(c,label.length>31?label.slice(0,30)+'…':label,p.x,p.y-103,12,'#263d43');}}

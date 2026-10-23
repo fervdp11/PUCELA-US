@@ -1,7 +1,7 @@
 import {createRoom,joinRoom,command,snapshot,GameError,roomCode} from './engine.js';
 import {encodePayload,readToken,emptyProgress,levelOf,hasClaimed,withClaim,REWARDS,MAX_LEVEL,LEVEL_XP} from '../public/pass.js';
 export const MAX_BODY=8192;
-export const VERSION='16.9.0-beta';
+export const VERSION='16.10.0-beta';
 
 // Progreso del pase firmado por el servidor (HMAC-SHA256). El cliente lo guarda
 // y lo presenta al entrar; sin el secreto no puede fabricar experiencia ni

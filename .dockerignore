@@ -1,0 +1,7 @@
+node_modules
+.git
+.sanagus-secret
+tests
+*.md
+*.bat
+data

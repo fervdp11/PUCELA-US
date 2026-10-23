@@ -1,4 +1,11 @@
-# PUCELA US BETA (16.9.0-beta)
+# PUCELA US BETA (16.10.0-beta)
+
+## 16.10
+- Fluidez: con una mesa abierta el mapa de fondo se repinta a ~5 fps; fondos, ring, campo, diana y público se pintan una vez y se copian; sin mediciones de diseño en cada fotograma. Mesas a ~60 Hz en el servidor.
+- El personaje ya no se para solo con la flecha pulsada: un microcorte o un lote rechazado ya no bloquea el movimiento ni corta la conexión.
+- Bailes solo desde la rueda de gestos (B), como los emojis; ya no salen al quedarse quieto.
+- Boxeo: esquiva (Q/Shift), contraataque tras bloquear y objetos en el ring (corazón, rayo, guantes de oro).
+- Personajes: ojos con brillo, parpadeo y mejillas.
 
 ## 16.9
 - Inicio directo (login/registro desactivados con `LOGIN_ENABLED=false`; cuentas y datos intactos). SHHH durante la bajada de la caravana y rol después.

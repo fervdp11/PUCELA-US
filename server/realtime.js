@@ -41,6 +41,9 @@ export function wsReader(onText,onClose,raw,onPong=()=>{}){
  };
 }
 
+// 16.10 · Mesas en tiempo real a ~60 Hz (antes 33 ms): boxeo y fútbol se ven más suaves y los golpes
+// llegan antes. El estado de la partida sigue a STATE_MS.
+export const TABLE_MS=16;
 export function attachTableSockets(server,store){
  const games=new Map(),tables=new Map(),all=new Set();let tableUrgent=null;
  const metrics=server.gameMetrics={cycles:0,cycleMs:0,maxCycleMs:0,snapshots:0,frames:0,bytes:0,inbound:0,skipped:0};
@@ -50,6 +53,7 @@ export function attachTableSockets(server,store){
   const text=JSON.stringify(message),frame=wsFrame(text);
   client.socket.write(frame);metrics.frames++;metrics.bytes+=frame.length;return true;
  }
+ function sendText(client,text){if(client.closed||client.socket.destroyed)return false;const frame=wsFrame(text);client.socket.write(frame);metrics.frames++;metrics.bytes+=frame.length;return true;}
  function available(client,now){
   if(client.closed)return false;
   if(client.socket.writableLength>HIGH_WATER){metrics.skipped++;client.blockedAt||=now;if(now-client.blockedAt>5000)client.close();return false;}
@@ -98,7 +102,11 @@ export function attachTableSockets(server,store){
     const msg=client.queue.shift(),now=Date.now();
     if(msg.t==='input'){
      try{await mutate(code,r=>realtimeMotion(r,token,msg.motion,now));}
-     catch(e){send(client,{t:'error',status:e.status||400,error:e.message});client.encoder.reset();}
+     catch(e){
+      // 16.10 · Un lote rechazado no corta la conexión: se devuelve el último movimiento aceptado
+      // y el cliente sigue andando desde ahí (antes se cerraba el socket y el personaje se paraba).
+      const ack=store.rooms?.get(code)?.players.find(p=>p.token===token&&!p.removed)?.motionSeq;
+      send(client,{t:'error',status:e.status||400,error:e.message,ack:Number.isSafeInteger(ack)?ack:undefined});client.encoder.reset();}
     }else if(msg.t==='action'){
      if(!Number.isSafeInteger(msg.id)||typeof msg.type!=='string'||msg.type==='pulse')continue;
      if(client.results.has(msg.id)){send(client,client.results.get(msg.id));continue;}
@@ -159,10 +167,10 @@ export function attachTableSockets(server,store){
    const playing=view?.phase==='playing'&&(view?.game==='boxing'||view?.game==='football');
    // Un solo JSON por mesa y jugador (las vistas comparten el mismo estado de juego).
    const text=JSON.stringify(view);
-   if(text!==client.last||playing||now-client.lastAt>1000){client.last=text;client.lastAt=now;send(client,{t:'view',view});}
+   if(text!==client.last||playing||now-client.lastAt>1000){client.last=text;client.lastAt=now;sendText(client,'{"t":"view","view":'+text+'}');}
   })).catch(()=>{for(const client of set)client.close();}).finally(()=>{set.busy=false;if(set.pending){set.pending=false;runTable(code,set);}});
  }
- const tableLoop=setInterval(()=>{for(const [code,set] of tables)runTable(code,set);},33);tableLoop.unref?.();
+ const tableLoop=setInterval(()=>{for(const [code,set] of tables)runTable(code,set);},TABLE_MS);tableLoop.unref?.();
  tableUrgent=(code)=>{const set=tables.get(code);if(!set)return;if(set.busy)set.pending=true;else runTable(code,set);};
  const rttProbe=setInterval(()=>{const now=Date.now();for(const set of games.values())for(const client of set)if(available(client,now))client.socket.write(wsFrame(String(now),9));},2000);rttProbe.unref?.();
  const heartbeat=setInterval(()=>{const now=Date.now();for(const client of all){if(now-client.lastPong>30000)client.close();else if(available(client,now))client.socket.write(wsFrame('',9));}},10000);heartbeat.unref?.();

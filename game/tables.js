@@ -134,9 +134,9 @@ function bxBots(st){for(const team of [0,1]){const h=bxHumans(st,team),other=bxH
   if(h>0){for(const b of bots)delete st.pl[b.id];}
   else if(other>0&&!bots.length){const id='boxbot-'+team;st.pl[id]=bxFighter(id,BXN[team],team,true);}
   else if(!other)for(const b of bots)delete st.pl[b.id];}}
-function bxFighter(id,name,team,bot=false){const k=Math.floor(Math.random()*5),ps=bxPos(team,k);return {id,name,team,bot,x:ps.x,y:ps.y,ix:0,iy:0,vx:0,vy:0,face:team?-1:1,hp:BX.hp,ult:0,block:false,atkReady:0,atkAt:0,ultAt:0,hitAt:0,stunUntil:0,inv:0,fly:0,flyUntil:0,blocked:0,think:0,blockUntil:0,combo:0,comboAt:0};}
+function bxFighter(id,name,team,bot=false){const k=Math.floor(Math.random()*5),ps=bxPos(team,k);return {id,name,team,bot,x:ps.x,y:ps.y,ix:0,iy:0,vx:0,vy:0,face:team?-1:1,hp:BX.hp,ult:0,block:false,atkReady:0,atkAt:0,ultAt:0,hitAt:0,stunUntil:0,inv:0,fly:0,flyUntil:0,blocked:0,think:0,blockUntil:0,combo:0,comboAt:0,dash:0,ddx:0,ddy:0,dashAt:0,dashReady:0,evade:0,evadedAt:0,parryAt:0,counterAt:0,goldUntil:0};}
 function bxSpawn(st,id,name){const team=st.joins++%2;st.pl[id]=bxFighter(id,name,team);st.pl[id].inv=st.last+1200;bxBots(st);}
-function boxingInit(now){return {pl:{},joins:0,score:[0,0],last:now,ko:null};}
+function boxingInit(now){return {pl:{},joins:0,score:[0,0],last:now,ko:null,pu:[],puNext:now+BX.puFirst,puSeq:0,puFx:null};}
 function bxOpp(st,q,reach,depth){let best=null,bd=1e9;for(const t of Object.values(st.pl)){if(t.team===q.team||t.hp<=0)continue;const dx=(t.x-q.x)*q.face,dy=Math.abs(t.y-q.y);if(dx<-8||dx>reach||dy>depth)continue;if(dx<bd){bd=dx;best=t;}}return best;}
 function bxNearest(st,q){let best=null,bd=1e9;for(const t of Object.values(st.pl)){if(t.team===q.team)continue;const d=Math.hypot(t.x-q.x,(t.y-q.y)*1.5);if(d<bd){bd=d;best=t;}}return best;}
 function bxHurt(st,t,dmg,by,now){if(now<t.inv)return;t.hp-=dmg;t.hitAt=now;t.ult=Math.min(100,t.ult+6);
@@ -150,24 +150,32 @@ function bxStrike(st,q,now,ult){const f=(t0)=>{if(t0)q.face=Math.sign(t0.x-q.x)|
  q.atkAt=now;if(ult){q.ultAt=now;q.ult=0;}
  if(!t)return true;
  if(now<t.inv)return true;
+ // Esquiva: durante el impulso el golpe (incluida la ulti) pasa de largo.
+ if(now<(t.evade||0)){t.evadedAt=now;return true;}
  const guarded=t.block&&t.face*q.face<0&&now>=t.stunUntil;
  if(ult){bxHurt(st,t,guarded?6:BX.ultDmg,q,now);t.fly=q.face;t.flyUntil=now+BX.flyMs;t.stunUntil=now+BX.flyMs+350;t.block=false;t.vx=0;t.vy=0;return true;}
- if(guarded){bxHurt(st,t,BX.blockDmg,q,now);q.blocked=now;q.ult=Math.min(100,q.ult+4);t.vx+=q.face*60;}
- else{q.combo=now-q.comboAt<1100?q.combo+1:1;q.comboAt=now;bxHurt(st,t,BX.dmg+Math.min(3,Math.max(0,q.combo-2)),q,now);q.ult=Math.min(100,q.ult+14);t.stunUntil=Math.max(t.stunUntil,now+170);t.vx+=q.face*190;}
+ if(guarded){bxHurt(st,t,BX.blockDmg,q,now);q.blocked=now;t.parryAt=now;q.ult=Math.min(100,q.ult+4);t.vx+=q.face*60;}
+ // Contraataque: golpear justo después de parar un golpe duele casi el doble y aturde más.
+ else if(now-(q.parryAt||0)<BX.counterMs){q.parryAt=0;q.counterAt=now;q.combo=now-q.comboAt<1100?q.combo+1:1;q.comboAt=now;bxHurt(st,t,Math.round(BX.counterDmg*(now<q.goldUntil?BX.goldK:1)),q,now);q.ult=Math.min(100,q.ult+22);t.stunUntil=Math.max(t.stunUntil,now+450);t.vx+=q.face*330;}
+ else{q.combo=now-q.comboAt<1100?q.combo+1:1;q.comboAt=now;bxHurt(st,t,Math.round((BX.dmg+Math.min(3,Math.max(0,q.combo-2)))*(now<q.goldUntil?BX.goldK:1)),q,now);q.ult=Math.min(100,q.ult+14);t.stunUntil=Math.max(t.stunUntil,now+170);t.vx+=q.face*190;}
  return true;}
 function boxingInput(st,seat,d,now,id){const q=st.pl[id];if(!q||q.hp<=0)return;
  if('x' in d||'y' in d){q.ix=clamp(Math.round(num(d.x)),-1,1);q.iy=clamp(Math.round(num(d.y)),-1,1);}
  if('block' in d)q.block=!!d.block&&now>=q.stunUntil;
  if(now<q.stunUntil)return;
  if(q.ix&&!q.block)q.face=q.ix;
+ if(d.dash&&!q.fly&&now>=q.dashReady){const l=Math.hypot(q.ix,q.iy);q.ddx=l?q.ix/l:-q.face;q.ddy=l?q.iy/l:0;q.dash=BX.dashMs/1000;q.dashAt=now;q.dashReady=now+BX.dashCd;q.evade=now+BX.evade;q.block=false;}
  if(d.atk&&!q.block&&now>=q.atkReady){q.atkReady=now+BX.cd;bxStrike(st,q,now,false);q.vx-=q.face*BX.recoil;}
  if(d.ult&&q.ult>=100&&!q.block&&now>=q.atkReady){if(bxStrike(st,q,now,true)){q.atkReady=now+BX.ultCd;q.vx-=q.face*BX.recoil*1.5;}}}
 function bxBrain(st,q,now){if(now<q.stunUntil||q.fly)return;const e=bxNearest(st,q);if(!e){q.ix=q.iy=0;return;}
  const dx=e.x-q.x,dy=e.y-q.y,close=Math.abs(dx)<BX.reach*.85&&Math.abs(dy)<BX.depth*.8;
  q.ix=close?0:Math.abs(dx)>BX.reach*.8?Math.sign(dx):0;q.iy=Math.abs(dy)>10?Math.sign(dy):0;if(dx)q.face=Math.sign(dx);
  if(q.block&&now>q.blockUntil)q.block=false;
+ const pu=(st.pu||[]).find(u=>Math.hypot(u.x-q.x,u.y-q.y)<140);if(pu&&!close){q.ix=Math.abs(pu.x-q.x)>6?Math.sign(pu.x-q.x):0;q.iy=Math.abs(pu.y-q.y)>6?Math.sign(pu.y-q.y):0;}
  if(now>=q.think){q.think=now+260+Math.random()*260;
-  if(e.atkAt&&now-e.atkAt<300&&close&&Math.random()<.35){q.block=true;q.blockUntil=now+420;}
+  if(e.atkAt&&now-e.atkAt<300&&close&&now>=q.dashReady&&Math.random()<.18){boxingInput(st,0,{dash:1},now,q.id);}
+  else if(e.atkAt&&now-e.atkAt<300&&close&&Math.random()<.35){q.block=true;q.blockUntil=now+420;}
+  else if(close&&!q.block&&now-(q.parryAt||0)<BX.counterMs&&now>=q.atkReady)boxingInput(st,0,{atk:1},now,q.id);
   else if(close&&!q.block&&now>=q.atkReady){if(q.ult>=100)boxingInput(st,0,{ult:1},now,q.id);else boxingInput(st,0,{atk:1},now,q.id);}}}
 function boxingTick(st,now){const dt=Math.min(.1,Math.max(0,(now-st.last)/1000));st.last=now;if(!dt)return;
  const all=Object.values(st.pl);for(const q of all)if(q.bot)bxBrain(st,q,now);
@@ -177,8 +185,15 @@ function boxingTick(st,now){const dt=Math.min(.1,Math.max(0,(now-st.last)/1000))
     for(const o of all)if(o!==q&&Math.hypot(o.x-q.x,o.y-q.y)<BX_MIN){q.x-=sub;stop=true;o.vx+=q.fly*120;break;}}
    if(stop||now>=q.flyUntil){q.fly=0;q.stunUntil=Math.max(q.stunUntil,now+350);}continue;}
   bxMove(q,dt,now<q.stunUntil);}
- bxSeparate(all);}
-const boxingView=st=>{const now0=st.last;return {w:BX.w,h:BX.h,pr:BX.pr,score:st.score,ko:st.ko,serverTime:st.last,pl:Object.values(st.pl).map(q=>({id:q.id,name:q.name,team:q.team,bot:q.bot||undefined,x:r1(q.x),y:r1(q.y),vx:r1(q.vx||0),vy:r1(q.vy||0),ix:q.ix,iy:q.iy,face:q.face,hp:Math.max(0,Math.round(q.hp)),ult:Math.round(q.ult),block:q.block,atkAt:q.atkAt,ultAt:q.ultAt,hitAt:q.hitAt,blocked:q.blocked,combo:now0-q.comboAt<1100?q.combo:0,stun:q.stunUntil,inv:q.inv,fly:q.fly}))};};
+ bxSeparate(all);bxPowerUps(st,all,now);}
+// Objetos del ring: corazón (+vida), rayo (+ulti) y guantes de oro (golpes ×1,5 durante 8 s).
+const PU_KINDS=['heart','bolt','gold'];
+function bxPowerUps(st,all,now){st.pu??=[];st.puNext??=now+BX.puFirst;st.pu=st.pu.filter(u=>now-u.at<BX.puLife);
+ if(now>=st.puNext){st.puNext=now+BX.puEvery+Math.random()*3500;if(all.length>=2&&st.pu.length<2){let x=0,y=0;for(let k=0;k<12;k++){x=90+Math.random()*(BX.w-180);y=BX.top+20+Math.random()*(BX.h-BX.top-50);if(all.every(q=>Math.hypot(q.x-x,q.y-y)>70))break;}st.pu.push({id:++st.puSeq,kind:PU_KINDS[Math.floor(Math.random()*PU_KINDS.length)],x:Math.round(x),y:Math.round(y),at:now});}}
+ for(const q of all){if(q.fly||q.hp<=0)continue;const i=st.pu.findIndex(u=>Math.hypot(u.x-q.x,u.y-q.y)<BX.pr+14);if(i<0)continue;const u=st.pu.splice(i,1)[0];
+  if(u.kind==='heart')q.hp=Math.min(BX.hp,q.hp+BX.heart);else if(u.kind==='bolt')q.ult=Math.min(100,q.ult+BX.bolt);else q.goldUntil=now+BX.goldMs;
+  st.puFx={at:now,kind:u.kind,id:q.id,x:u.x,y:u.y};}}
+const boxingView=st=>{const now0=st.last;return {w:BX.w,h:BX.h,pr:BX.pr,score:st.score,ko:st.ko,serverTime:st.last,pl:Object.values(st.pl).map(q=>({id:q.id,name:q.name,team:q.team,bot:q.bot||undefined,x:r1(q.x),y:r1(q.y),vx:r1(q.vx||0),vy:r1(q.vy||0),ix:q.ix,iy:q.iy,face:q.face,hp:Math.max(0,Math.round(q.hp)),ult:Math.round(q.ult),block:q.block,atkAt:q.atkAt,ultAt:q.ultAt,hitAt:q.hitAt,blocked:q.blocked,combo:now0-q.comboAt<1100?q.combo:0,stun:q.stunUntil,inv:q.inv,fly:q.fly,dash:q.dash>0?Math.round(q.dash*1000)/1000:0,ddx:r1(q.ddx||0),ddy:r1(q.ddy||0),dashAt:q.dashAt||0,dashReady:q.dashReady||0,evadedAt:q.evadedAt||0,counterAt:q.counterAt||0,gold:q.goldUntil>now0?q.goldUntil:0})),pu:(st.pu||[]).map(u=>({id:u.id,kind:u.kind,x:u.x,y:u.y,at:u.at})),puFx:st.puFx||null};};
 const OPEN={football:{spawn:fbSpawn,drop:(st,id)=>{delete st.pl[id];}},boxing:{spawn:bxSpawn,drop:(st,id)=>{delete st.pl[id];bxBots(st);}}};
 
 // ----------------------------------------------------------------- rival bot

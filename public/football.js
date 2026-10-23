@@ -72,9 +72,13 @@ export function fbKick(b,q,reach=FB.reach){const dx=b.x-q.x,dy=b.y-q.y,dist=Math
 
 // 16.7 · Boxeo: arena 2D con profundidad. Movimiento ágil (no pesado como el fútbol) para que
 // los golpes se sientan rápidos; el mismo código corre en servidor y en la predicción del cliente.
-export const BX={w:600,h:250,pr:16,speed:185,accel:13,brake:15,reach:46,depth:26,dmg:8,blockDmg:1.5,ultDmg:18,ultReach:62,ultDepth:38,cd:380,ultCd:800,flySpeed:1500,flyMs:520,hp:100,heal:25,inv:1500,blockSlow:.42,top:34,recoil:95};
-export function bxMove(q,dt,lock=false){const il=lock?0:Math.hypot(q.ix,q.iy),l=il||1,f=q.block?BX.blockSlow:1,tx=q.ix/l*BX.speed*f,ty=q.iy/l*BX.speed*f,k=1-Math.exp(-(il?BX.accel:BX.brake)*dt);
- q.vx=(q.vx||0)+((il?tx:0)-(q.vx||0))*k;q.vy=(q.vy||0)+((il?ty:0)-(q.vy||0))*k;if(!il&&Math.hypot(q.vx,q.vy)<4){q.vx=0;q.vy=0;}
+export const BX={w:600,h:250,pr:16,speed:185,accel:13,brake:15,reach:46,depth:26,dmg:8,blockDmg:1.5,ultDmg:18,ultReach:62,ultDepth:38,cd:380,ultCd:800,flySpeed:1500,flyMs:520,hp:100,heal:25,inv:1500,blockSlow:.42,top:34,recoil:95,
+ // 16.10 · esquiva (Shift/Q), contraataque tras bloquear y objetos en el ring
+ dashSpeed:470,dashMs:170,dashCd:900,evade:230,counterMs:550,counterDmg:15,puFirst:7000,puEvery:7500,puLife:12000,heart:30,bolt:50,goldMs:8000,goldK:1.5};
+export function bxMove(q,dt,lock=false){
+ if(q.dash>0){q.dash=Math.max(0,q.dash-dt);q.vx=(q.ddx||0)*BX.dashSpeed;q.vy=(q.ddy||0)*BX.dashSpeed;if(!q.dash){q.vx*=.35;q.vy*=.35;}}
+ else{const il=lock?0:Math.hypot(q.ix,q.iy),l=il||1,f=q.block?BX.blockSlow:1,tx=q.ix/l*BX.speed*f,ty=q.iy/l*BX.speed*f,k=1-Math.exp(-(il?BX.accel:BX.brake)*dt);
+ q.vx=(q.vx||0)+((il?tx:0)-(q.vx||0))*k;q.vy=(q.vy||0)+((il?ty:0)-(q.vy||0))*k;if(!il&&Math.hypot(q.vx,q.vy)<4){q.vx=0;q.vy=0;}}
  q.x+=q.vx*dt;q.y+=q.vy*dt;
  if(q.x<BX.pr){q.x=BX.pr;q.vx=Math.max(0,q.vx);}if(q.x>BX.w-BX.pr){q.x=BX.w-BX.pr;q.vx=Math.min(0,q.vx);}
  if(q.y<BX.top){q.y=BX.top;q.vy=Math.max(0,q.vy);}if(q.y>BX.h-BX.pr){q.y=BX.h-BX.pr;q.vy=Math.min(0,q.vy);}}
