@@ -49,10 +49,17 @@ function canvasBox(canvas){let box=canvasBoxes.get(canvas);if(box&&box.w>1&&box.
 const QL=[.7,.85,1,1.25,1.5];
 const quality={cap:1.5,i:4,ceil:4,upAt:0,last:0,winStart:0,frames:0,fast:0};
 export function renderQuality(){return quality.cap;}
-function trackQuality(){if(!quality.init&&typeof window!=='undefined'){quality.init=1;const r=window.devicePixelRatio||1;while(quality.i>2&&QL[quality.i]>r+.01)quality.i--;quality.ceil=quality.i;quality.cap=QL[quality.i];}
+// Con una mesa abierta el mapa se repinta a ~5 fps a propósito: el cliente lo avisa para que
+// esos intervalos no cuenten como lentitud.
+export function setBackgroundRender(on){quality.bg=!!on;}
+function trackQuality(){if(globalThis.__qaRenderScale){quality.cap=globalThis.__qaRenderScale;return;}// banco de pruebas: densidad fija
+ if(!quality.init&&typeof window!=='undefined'){quality.init=1;const r=window.devicePixelRatio||1;while(quality.i>2&&QL[quality.i]>r+.01)quality.i--;quality.ceil=quality.i;quality.cap=QL[quality.i];}
  const t=performance.now(),d=quality.last?t-quality.last:0;quality.last=t;
  // Pausas largas (pestaña oculta, carga, mesa abierta con el mapa a pocos fps) no cuentan como lentitud.
- if(d>150||!quality.winStart){quality.winStart=t;quality.frames=0;return;}
+ // Un equipo que va siempre por debajo de ~7 fps sí: antes todos sus fotogramas parecían pausas
+ // y la resolución nunca bajaba. Solo se descarta un intervalo largo aislado.
+ const long=d>150,pause=long&&(quality.bg||document.hidden||d>1000||!quality.long);quality.long=long;
+ if(pause||!quality.winStart){quality.winStart=t;quality.frames=0;return;}
  quality.frames++;const span=t-quality.winStart;if(span<1500)return;const avg=span/quality.frames;quality.winStart=t;quality.frames=0;
  if(avg>20.5){quality.fast=0;if(quality.i>0){if(t-quality.upAt<6000)quality.ceil=quality.i-1;quality.i--;}}
  else if(avg<17.6){if(++quality.fast>=5&&quality.i<quality.ceil){quality.i++;quality.upAt=t;quality.fast=0;}}
@@ -207,16 +214,30 @@ function frontOccluders(map,p){const out=[];if(p.alive===false)return out;
   if(r.kind==='wall'){if(!wallTheme(map.worldId)||map.isCaravan||boundaryWall(map,r,floorAt))continue;const b=wallVolumeRect(r);if(b.y<p.y+8)out.push(b);continue;}
   if(r.kind==='closed-door'||isParkFlat(r))continue;const top=r.y*TILE-propHeight(r);if(top<p.y+8)out.push({x:r.x*TILE,y:top,w:r.w*TILE,h:(r.y+r.h)*TILE-top});}
  return out;}
-function sweptVisibleClip(c,points,actors,up=104,holes=[]){c.beginPath();c.moveTo(points[0].x,points[0].y);for(let i=1;i<points.length;i++)c.lineTo(points[i].x,points[i].y);c.closePath();
+// El recorte del repintado se limita primero a una caja holgada alrededor del personaje (cabe todo
+// lo que dibuja: cuerpo, anillos de habilidad, brazos del profesor). Dentro de la caja la región es
+// la misma y fuera no se dibuja nada, pero el navegador ya no calcula la máscara del polígono de
+// visión sobre toda la pantalla por cada personaje. (Recortar además el polígono en JS no ganaba
+// tiempo medible y cambiaba el antialiasing de algún borde, así que el camino es el original.)
+const REDRAW_BOX={l:160,r:160,t:220,b:120};
+function sweptVisibleClip(c,points,actors,up=104,holes=[]){const A0=actors[0],bx0=A0.x-REDRAW_BOX.l,by0=A0.y-REDRAW_BOX.t,bx1=A0.x+REDRAW_BOX.r,by1=A0.y+REDRAW_BOX.b;c.beginPath();c.rect(bx0,by0,bx1-bx0,by1-by0);c.clip();
+ c.beginPath();c.moveTo(points[0].x,points[0].y);for(let i=1;i<points.length;i++)c.lineTo(points[i].x,points[i].y);c.closePath();
  let area=0;for(let i=0;i<points.length;i++){const a=points[i],b=points[(i+1)%points.length];area+=a.x*b.y-b.x*a.y;}
  const boxes=actors.map(p=>({x0:p.x-30,x1:p.x+30,y0:p.y-110,y1:p.y+up+14}));
  for(let i=0;i<points.length;i++){const a=points[i],b=points[(i+1)%points.length];if(Math.abs(b.x-a.x)<.01)continue;const ex0=Math.min(a.x,b.x),ex1=Math.max(a.x,b.x),ey0=Math.min(a.y,b.y)-up,ey1=Math.max(a.y,b.y);if(!boxes.some(q=>ex1>=q.x0&&ex0<=q.x1&&ey1>=q.y0&&ey0<=q.y1))continue;
   const q=[a,b,{x:b.x,y:b.y-up},{x:a.x,y:a.y-up}],qa=(b.x-a.x)*(-up),v=Math.sign(qa)===Math.sign(area)?q:q.reverse();c.moveTo(v[0].x,v[0].y);for(let j=1;j<4;j++)c.lineTo(v[j].x,v[j].y);c.closePath();}
  c.clip('nonzero');
  if(holes.length){const A=actors[0],X0=A.x-60,Y0=A.y-140,X1=A.x+60,Y1=A.y+40;c.beginPath();c.rect(X0,Y0,X1-X0,Y1-Y0);for(const h of holes){const x0=Math.max(X0,h.x),y0=Math.max(Y0,h.y),x1=Math.min(X1,h.x+h.w),y1=Math.min(Y1,h.y+h.h);if(x1>x0&&y1>y0){c.moveTo(x0,y0);c.lineTo(x0,y1);c.lineTo(x1,y1);c.lineTo(x1,y0);c.closePath();}}c.clip('evenodd');}}
+// La máscara solo depende del polígono de visión, la cámara, el tamaño, el mapa, la posición,
+// el radio del apagón y los cuartos apagados (las superficies del mapa son fijas). Si nada de
+// eso cambia —jugador quieto— se reutiliza la del fotograma anterior en vez de rehacerla.
+let lightKey=null;
+function sameKey(a,b){if(!a||a.length!==b.length)return false;for(let i=0;i<a.length;i++)if(a[i]!==b[i])return false;return true;}
 function buildLightMask(w,h,cam,scale,map,local,points,scene,ring,darkRects=[]){
  const k=w*h>1.3e6?.42:.5,W=Math.max(1,Math.ceil(w*k)),H=Math.max(1,Math.ceil(h*k));
  if(!lightCanvas){lightCanvas=document.createElement('canvas');lightCtx=lightCanvas.getContext('2d');}if(globalThis.__qa)globalThis.__qa.lightMask=lightCanvas;
+ const key=[points,w,h,cam.x,cam.y,scale,map,local.x,local.y,ring,darkRects.map(r=>`${r.x},${r.y},${r.w},${r.h}`).join(';')];
+ if(lightCanvas.width===W&&lightCanvas.height===H&&sameKey(lightKey,key))return {canvas:lightCanvas,W,H,k};lightKey=key;
  if(lightCanvas.width!==W||lightCanvas.height!==H){lightCanvas.width=W;lightCanvas.height=H;}
  const m=lightCtx;m.setTransform(1,0,0,1,0,0);m.globalCompositeOperation='source-over';m.clearRect(0,0,W,H);m.fillStyle=FOG;m.fillRect(0,0,W,H);
  m.setTransform(k*scale,0,0,k*scale,k*(w/2-cam.x*scale),k*(h/2-cam.y*scale));
